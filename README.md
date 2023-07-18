@@ -47,6 +47,35 @@ handle.get_captures() # returns list of 'captures' dictionaries
 handle.get_annotations() # returns list of all annotations
 ```
 
+### Load a SigMF archive with multiple recordings
+There are different ways to read an archive using `SigMFArchiveReader`
+class, the `sigmffile.fromarchive()` method, and the `sigmffile.fromfile()`
+method.
+
+```python
+import numpy as np
+from sigmf.archivereader import SigMFArchiveReader
+
+from sigmf.sigmffile import (fromarchive,
+                             fromfile)
+
+# read multirecording archive using fromarchive
+sigmffiles = fromarchive("multi_recording_archive.sigmf")
+# length should be equal to the number of recordings in the archive
+print(len(sigmffiles))  
+
+# read multirecording archive using fromfile
+sigmffiles = fromfile("multi_recording_archive.sigmf")
+# length should be equal to the number of recordings in the archive
+print(len(sigmffiles))
+
+# read multirecording archive using SigMFArchiveReader
+reader = SigMFArchiveReader("multi_recording_archive.sigmf")
+# length of reader and reader.sigmffiles should be equal to the number of recordings in the archive
+print(len(reader))
+print(len(reader.sigmffiles))
+```
+
 ### Verify SigMF dataset integrity & compliance
 
 ```bash
@@ -107,6 +136,7 @@ data.tofile('example_cf32.sigmf-data')
 
 # create the metadata
 meta = SigMFFile(
+    name='example_cf32',
     data_file='example_cf32.sigmf-data', # extension is optional
     global_info = {
         SigMFFile.DATATYPE_KEY: get_data_type_str(data),  # in this case, 'cf32_le'
@@ -147,6 +177,7 @@ data_ci16.view(np.float32).astype(np.int16).tofile('example_ci16.sigmf-data')
 
 # create the metadata for the second file
 meta_ci16 = SigMFFile(
+    name='example_ci16',
     data_file='example_ci16.sigmf-data', # extension is optional
     global_info = {
         SigMFFile.DATATYPE_KEY: 'ci16_le', # get_data_type_str() is only valid for numpy types
@@ -180,6 +211,80 @@ ci16_sigmffile = collection.get_SigMFFile(stream_name='example_ci16')
 cf32_sigmffile = collection.get_SigMFFile(stream_name='example_cf32')
 ```
 
+### Create a SigMF Archive
+The `SigMFArchive` class, the `SigMFFile.archive()` method, and the
+`SigMFFile.tofile()` method can all be used to create an archive. 
+
+```python
+import numpy as np
+
+from sigmf.sigmffile import (SigMFFile,
+                             SigMFArchive)
+
+
+# create data file
+random_data = np.random.rand(128)
+data_path = "recording.sigmf-data"
+random_data.tofile(data_path)
+
+# create metadata
+sigmf_file = SigMFFile(name='recording')
+sigmf_file.set_global_field("core:datatype", "rf32_le")
+sigmf_file.add_annotation(start_index=0, length=len(random_data))
+sigmf_file.add_capture(start_index=0)
+sigmf_file.set_data_file(data_path)
+
+# create archive using SigMFArchive
+archive = SigMFArchive(sigmffiles=sigmf_file,
+                        path="single_recording_archive1.sigmf")
+
+# create archive using SigMFFile archive()
+archive_path = sigmf_file.archive(file_path="single_recording_archive2.sigmf")
+
+# create archive using tofile
+sigmf_file.tofile(file_path="single_recording_archive3.sigmf",
+                    toarchive=True)
+```
+
+### Create SigMF Archives with Multiple Recordings
+Archives with multiple recordings can be created using the `SigMFArchive` class.
+
+```python
+import numpy as np
+
+from sigmf.sigmffile import (SigMFFile,
+                             SigMFArchive)
+
+
+# create data files
+random_data1 = np.random.rand(128)
+data1_path = "recording1.sigmf-data"
+random_data1.tofile(data1_path)
+
+random_data2 = np.random.rand(128)
+data2_path = "recording2.sigmf-data"
+random_data2.tofile(data2_path)
+
+# create metadata
+sigmf_file_1 = SigMFFile(name='recording1')
+sigmf_file_1.set_global_field("core:datatype", "rf32_le")
+sigmf_file_1.add_annotation(start_index=0, length=len(random_data1))
+sigmf_file_1.add_capture(start_index=0)
+sigmf_file_1.set_data_file(data1_path)
+
+sigmf_file_2 = SigMFFile(name='recording2')
+sigmf_file_2.set_global_field("core:datatype", "rf32_le")
+sigmf_file_2.add_annotation(start_index=0, length=len(random_data2))
+sigmf_file_2.add_capture(start_index=0)
+sigmf_file_2.set_data_file(data2_path)
+
+
+# create archive using SigMFArchive
+sigmffiles = [sigmf_file_1, sigmf_file_2]
+archive = SigMFArchive(sigmffiles=sigmffiles,
+                        path="multi_recording_archive.sigmf")
+```
+
 ### Load a SigMF Archive and slice its data without untaring it
 
 Since an *archive* is merely a tarball (uncompressed), and since there any many
@@ -196,13 +301,13 @@ In [1]: import sigmf
 
 In [2]: arc = sigmf.SigMFArchiveReader('/src/LTE.sigmf')
 
-In [3]: arc.shape
+In [3]: arc.sigmffiles[0].shape
 Out[3]: (15379532,)
 
-In [4]: arc.ndim
+In [4]: arc.sigmffiles[0].ndim
 Out[4]: 1
 
-In [5]: arc[:10]
+In [5]: arc.sigmffiles[0][:10]
 Out[5]: 
 array([-20.+11.j, -21. -6.j, -17.-20.j, -13.-52.j,   0.-75.j,  22.-58.j,
         48.-44.j,  49.-60.j,  31.-56.j,  23.-47.j], dtype=complex64)
@@ -215,13 +320,13 @@ However, the `.sigmffile` member keeps track of this, and converts the data
 to `numpy.complex64` *after* slicing it, that is, after reading it from disk.
 
 ```python
-In [6]: arc.sigmffile.get_global_field(sigmf.SigMFFile.DATATYPE_KEY)
+In [6]: arc.sigmffiles[0].get_global_field(sigmf.SigMFFile.DATATYPE_KEY)
 Out[6]: 'ci16_le'
 
-In [7]: arc.sigmffile._memmap.dtype
+In [7]: arc.sigmffiles[0]._memmap.dtype
 Out[7]: dtype('int16')
 
-In [8]: arc.sigmffile._return_type
+In [8]: arc.sigmffiles[0]._return_type
 Out[8]: '<c8'
 ```
 
@@ -237,7 +342,7 @@ In [2]: sigmf_bytes = io.BytesIO(open('/src/LTE.sigmf', 'rb').read())
 
 In [3]: arc = sigmf.SigMFArchiveReader(archive_buffer=sigmf_bytes)
 
-In [4]: arc[:10]
+In [4]: arc.sigmffiles[0][:10]
 Out[4]: 
 array([-20.+11.j, -21. -6.j, -17.-20.j, -13.-52.j,   0.-75.j,  22.-58.j,
         48.-44.j,  49.-60.j,  31.-56.j,  23.-47.j], dtype=complex64)
